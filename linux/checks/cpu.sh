@@ -42,8 +42,9 @@ check_load_average() {
 
     cpu_cores="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
     read -r load1 load5 load15 ignored < /proc/loadavg
-    load1_per_core="$(awk -v load="$load1" -v cores="$cpu_cores" 'BEGIN { printf "%.2f", load / cores }')"
-    load15_per_core="$(awk -v load="$load15" -v cores="$cpu_cores" 'BEGIN { printf "%.2f", load / cores }')"
+    # `load` là tên builtin của GNU awk mới; dùng tên khác để tương thích.
+    load1_per_core="$(awk -v load_value="$load1" -v cores="$cpu_cores" 'BEGIN { printf "%.2f", load_value / cores }')"
+    load15_per_core="$(awk -v load_value="$load15" -v cores="$cpu_cores" 'BEGIN { printf "%.2f", load_value / cores }')"
 
     info "cores=${cpu_cores}; load1=${load1}; load5=${load5}; load15=${load15}"
 
