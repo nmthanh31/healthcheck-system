@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Linux health-check report
+
+[Service]
+Type=oneshot
+# Replace this path with the deployed location of this folder.
+WorkingDirectory=/opt/health-check/linux
+ExecStart=/bin/bash /opt/health-check/linux/linux-healthcheck.sh
+# WARNING and CRITICAL are valid health-check results, not a failed scheduler.
+SuccessExitStatus=1 2

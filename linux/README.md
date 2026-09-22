@@ -19,6 +19,13 @@ linux-healthcheck.sh
 Mỗi file trong `checks/` chỉ phụ trách một mảng: CPU, memory, filesystem,
 disk I/O, network, process, hardware hoặc system log.
 
+`config/targets.conf` là nơi khai báo những gì thực sự quan trọng với hệ thống:
+service systemd, HTTP health endpoint, TCP dependency và file đánh dấu backup
+thành công. Các check này được đưa vào báo cáo `APPLICATION & BACKUP`.
+
+Để tự chạy báo cáo lúc 07:00 hằng ngày, dùng các template trong
+[`systemd/`](systemd/README.md).
+
 Không cần sửa source để đổi ngưỡng. Ghi đè bằng biến môi trường, ví dụ:
 
 ```bash

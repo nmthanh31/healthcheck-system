@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Linux health-check every morning
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+Unit=linux-healthcheck.service
+
+[Install]
+WantedBy=timers.target

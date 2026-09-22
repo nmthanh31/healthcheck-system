@@ -8,6 +8,28 @@ CRIT_COUNT=0
 SKIP_COUNT=0
 ALERT_LINES=()
 SKIP_LINES=()
+CATEGORY_ORDER=()
+CURRENT_SECTION="General"
+declare -A CATEGORY_SEEN=()
+declare -A CATEGORY_LEVEL=()
+
+register_category() {
+    local category="$1"
+    if [ -z "${CATEGORY_SEEN[$category]+present}" ]; then
+        CATEGORY_SEEN["$category"]=1
+        CATEGORY_LEVEL["$category"]="OK"
+        CATEGORY_ORDER+=("$category")
+    fi
+}
+
+mark_category() {
+    local level="$1" category="$CURRENT_SECTION"
+    register_category "$category"
+    # CRITICAL luôn được ưu tiên hơn WARNING cho cùng một nhóm.
+    if [ "$level" = "CRITICAL" ] || [ "${CATEGORY_LEVEL[$category]}" = "OK" ]; then
+        CATEGORY_LEVEL["$category"]="$level"
+    fi
+}
 
 mkdir_safe() {
     mkdir -p "$1" 2>/dev/null
@@ -27,20 +49,32 @@ initialize_runtime() {
 
 # Thu thập kết quả trong lúc chạy để file log cuối cùng ngắn, dễ đọc.
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"; }
-ok() { :; }
-info() { :; }
-section() { :; }
+ok() {
+    register_category "$CURRENT_SECTION"
+    # Nếu một phần tùy chọn bị bỏ qua nhưng một phần khác của nhóm chạy tốt,
+    # nhóm đó vẫn được xem là OK.
+    [ "${CATEGORY_LEVEL[$CURRENT_SECTION]}" = "SKIPPED" ] && CATEGORY_LEVEL["$CURRENT_SECTION"]="OK"
+}
+info() { register_category "$CURRENT_SECTION"; }
+section() {
+    CURRENT_SECTION="$1"
+    register_category "$CURRENT_SECTION"
+}
 warn() {
     WARN_COUNT=$((WARN_COUNT + 1))
-    ALERT_LINES+=("[WARNING]  $*")
+    mark_category "WARNING"
+    ALERT_LINES+=("[WARNING]  ${CURRENT_SECTION}: $*")
 }
 crit() {
     CRIT_COUNT=$((CRIT_COUNT + 1))
-    ALERT_LINES+=("[CRITICAL] $*")
+    mark_category "CRITICAL"
+    ALERT_LINES+=("[CRITICAL] ${CURRENT_SECTION}: $*")
 }
 skip() {
     SKIP_COUNT=$((SKIP_COUNT + 1))
-    SKIP_LINES+=("$*")
+    register_category "$CURRENT_SECTION"
+    [ "${CATEGORY_LEVEL[$CURRENT_SECTION]}" = "OK" ] && CATEGORY_LEVEL["$CURRENT_SECTION"]="SKIPPED"
+    SKIP_LINES+=("${CURRENT_SECTION}: $*")
 }
 
 float_ge() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a >= b) }'; }
@@ -100,7 +134,7 @@ persist_history() {
 }
 
 print_summary_and_exit() {
-    local result exit_code=0 item
+    local result exit_code=0 item category level
 
     if [ "$CRIT_COUNT" -gt 0 ]; then
         result="CRITICAL"
@@ -122,6 +156,13 @@ print_summary_and_exit() {
     log "Warnings  : $WARN_COUNT"
     log "Criticals : $CRIT_COUNT"
     log "Skipped   : $SKIP_COUNT"
+
+    log ""
+    log "CHECK STATUS:"
+    for category in "${CATEGORY_ORDER[@]}"; do
+        level="${CATEGORY_LEVEL[$category]}"
+        printf '[%s] %-10s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$category" | tee -a "$LOG_FILE"
+    done
 
     if [ "${#ALERT_LINES[@]}" -gt 0 ]; then
         log ""

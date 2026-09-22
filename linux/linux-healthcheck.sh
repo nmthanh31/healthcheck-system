@@ -17,6 +17,8 @@ TODAY="$(date '+%Y-%m-%d')"
 
 # shellcheck source=config/defaults.sh
 source "${SCRIPT_DIR}/config/defaults.sh"
+# shellcheck source=config/targets.conf
+source "${SCRIPT_DIR}/config/targets.conf"
 LOG_FILE="${HC_LOG_DIR}/healthcheck-${TODAY}.log"
 HISTORY_FILE="${HC_STATE_DIR}/history.csv"
 NET_STATE_FILE="${HC_STATE_DIR}/network.state"
@@ -46,6 +48,8 @@ main() {
     check_processes
     check_hardware
     check_system_logs
+    check_platform_operations
+    check_application_services
 
     persist_history
     print_summary_and_exit
