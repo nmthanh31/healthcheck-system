@@ -18,18 +18,8 @@ check_file_descriptors() {
     fi
 
     if ! command -v lsof >/dev/null 2>&1; then
-        skip "lsof missing; cannot list processes holding the most FDs"
-        return
+        skip "lsof missing; cannot inspect top file-descriptor holders"
     fi
-
-    info "Top open-file holders (sample):"
-    lsof -nP 2>/dev/null |
-        awk 'NR > 1 { count[$2]++; command[$2] = $1 } END { for (pid in count) print count[pid], pid, command[pid] }' |
-        sort -nr |
-        head -n 5 |
-        while read -r count pid command; do
-            log "           PID=${pid} CMD=${command} FD_COUNT=${count}"
-        done
 }
 
 check_processes() {

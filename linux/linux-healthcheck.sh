@@ -36,12 +36,6 @@ done
 main() {
     initialize_runtime || return $?
 
-    log "Linux Server Health Check"
-    log "Host: $HOST"
-    log "Started: $NOW"
-    log "Kernel: $(uname -r)"
-    log "Uptime: $(uptime -p 2>/dev/null || true)"
-
     check_cpu_iowait
     check_load_average
     check_memory

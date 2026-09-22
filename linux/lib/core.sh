@@ -6,6 +6,8 @@
 WARN_COUNT=0
 CRIT_COUNT=0
 SKIP_COUNT=0
+ALERT_LINES=()
+SKIP_LINES=()
 
 mkdir_safe() {
     mkdir -p "$1" 2>/dev/null
@@ -23,18 +25,22 @@ initialize_runtime() {
     }
 }
 
+# Thu thập kết quả trong lúc chạy để file log cuối cùng ngắn, dễ đọc.
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"; }
-ok() { log "[OK]       $*"; }
-warn() { WARN_COUNT=$((WARN_COUNT + 1)); log "[WARNING]  $*"; }
-crit() { CRIT_COUNT=$((CRIT_COUNT + 1)); log "[CRITICAL] $*"; }
-skip() { SKIP_COUNT=$((SKIP_COUNT + 1)); log "[SKIP]     $*"; }
-info() { log "[INFO]     $*"; }
-
-section() {
-    printf '\n' | tee -a "$LOG_FILE" >/dev/null
-    log "===================================================================="
-    log "$1"
-    log "===================================================================="
+ok() { :; }
+info() { :; }
+section() { :; }
+warn() {
+    WARN_COUNT=$((WARN_COUNT + 1))
+    ALERT_LINES+=("[WARNING]  $*")
+}
+crit() {
+    CRIT_COUNT=$((CRIT_COUNT + 1))
+    ALERT_LINES+=("[CRITICAL] $*")
+}
+skip() {
+    SKIP_COUNT=$((SKIP_COUNT + 1))
+    SKIP_LINES+=("$*")
 }
 
 float_ge() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a >= b) }'; }
@@ -94,14 +100,48 @@ persist_history() {
 }
 
 print_summary_and_exit() {
-    section "HEALTH CHECK SUMMARY"
+    local result exit_code=0 item
+
+    if [ "$CRIT_COUNT" -gt 0 ]; then
+        result="CRITICAL"
+        exit_code=2
+    elif [ "$WARN_COUNT" -gt 0 ]; then
+        result="WARNING"
+        exit_code=1
+    else
+        result="HEALTHY"
+    fi
+
+    printf '\n' >> "$LOG_FILE"
+    log "===================================================================="
+    log "LINUX HEALTH CHECK REPORT"
+    log "===================================================================="
     log "Host      : $HOST"
+    log "Checked at: $NOW"
+    log "Result    : $result"
     log "Warnings  : $WARN_COUNT"
     log "Criticals : $CRIT_COUNT"
     log "Skipped   : $SKIP_COUNT"
+
+    if [ "${#ALERT_LINES[@]}" -gt 0 ]; then
+        log ""
+        log "ISSUES REQUIRING ATTENTION:"
+        for item in "${ALERT_LINES[@]}"; do
+            log "  ${item}"
+        done
+    else
+        log ""
+        log "No warnings or critical issues detected."
+    fi
+
+    if [ "${#SKIP_LINES[@]}" -gt 0 ]; then
+        log ""
+        log "OPTIONAL CHECKS SKIPPED:"
+        for item in "${SKIP_LINES[@]}"; do
+            log "  - ${item}"
+        done
+    fi
+
     log "Log file  : $LOG_FILE"
-    if [ "$CRIT_COUNT" -gt 0 ]; then log "RESULT    : CRITICAL"; return 2; fi
-    if [ "$WARN_COUNT" -gt 0 ]; then log "RESULT    : WARNING"; return 1; fi
-    log "RESULT    : HEALTHY"
-    return 0
+    return "$exit_code"
 }
