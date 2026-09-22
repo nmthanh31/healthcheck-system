@@ -17,7 +17,9 @@ check_disk_io() {
 
     while IFS='|' read -r device await_ms utilization; do
         [ -n "$device" ] || continue
-        case "$device" in loop*|ram*|zram*|sr*|fd*) continue ;; esac
+        # dm-* and md* are logical mappings. Reporting both them and their
+        # backing disk duplicates the same bottleneck in the daily report.
+        case "$device" in loop*|ram*|zram*|sr*|fd*|dm-*|md*) continue ;; esac
 
         rotation_file="/sys/class/block/${device}/queue/rotational"
         rotational="unknown"

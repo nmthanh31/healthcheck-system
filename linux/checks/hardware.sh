@@ -41,14 +41,16 @@ check_smart() {
         case "$device" in loop*|ram*|zram*|dm-*|md*|sr*|fd*) continue ;; esac
         [ -b "/dev/$device" ] || continue
         found=1
-        smart_output="$(smartctl -H "/dev/$device" 2>/dev/null || true)"
+        smart_output="$(smartctl -H "/dev/$device" 2>&1 || true)"
 
-        if grep -Eqi 'PASSED|OK' <<< "$smart_output"; then
+        # Do not match generic words such as "open device ... failed". Virtual
+        # disks often do not expose SMART and that is not a disk-health failure.
+        if grep -Eqi 'SMART overall-health self-assessment test result:[[:space:]]*(PASSED|OK)|SMART Health Status:[[:space:]]*(PASSED|OK)' <<< "$smart_output"; then
             ok "SMART /dev/${device}: PASSED/OK"
-        elif grep -Eqi 'FAILED|BAD|FAIL' <<< "$smart_output"; then
+        elif grep -Eqi 'SMART overall-health self-assessment test result:[[:space:]]*(FAILED|BAD)|SMART Health Status:[[:space:]]*(FAILED|BAD)' <<< "$smart_output"; then
             crit "SMART /dev/${device}: FAILED/BAD"
         else
-            info "SMART /dev/${device}: no clear health status"
+            info "SMART /dev/${device}: unsupported or no clear health status"
         fi
     done
 
