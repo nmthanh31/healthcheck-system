@@ -22,5 +22,7 @@ Report được ghi tại `/var/log/kubernetes-healthcheck/kubernetes-healthchec
 
 ## Cấu hình workload đặc thù
 
-Sửa `config/targets.conf` để bỏ qua namespace test, kiểm tra snapshot etcd,
-hoặc tắt Longhorn check khi cluster không dùng Longhorn.
+Sửa `config/targets.conf` để bỏ qua namespace test, kiểm tra hourly/daily
+etcd snapshot, hoặc tắt Longhorn check khi cluster không dùng Longhorn. Khi
+đặt marker thành `true`, backup script phải tạo file `SUCCESS` trong cùng thư
+mục với `snapshot.db` chỉ sau khi backup hoàn tất.

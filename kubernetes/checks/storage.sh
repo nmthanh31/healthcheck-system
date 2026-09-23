@@ -29,27 +29,39 @@ check_longhorn() {
 }
 
 check_etcd_snapshot_age() {
-    local latest current age_hours
-    if [ -z "$K8S_ETCD_SNAPSHOT_DIR" ]; then
-        skip "No etcd snapshot directory configured; edit config/targets.conf"
+    local target tier directory max_age_hours require_marker latest latest_path
+    local current age_hours snapshot_dir
+    if [ "${#K8S_ETCD_BACKUP_TARGETS[@]}" -eq 0 ]; then
+        skip "No etcd backup target configured; edit config/targets.conf"
         return
     fi
-    if [ ! -d "$K8S_ETCD_SNAPSHOT_DIR" ]; then
-        warn "etcd snapshot directory not found: ${K8S_ETCD_SNAPSHOT_DIR}"
-        return
-    fi
-    latest="$(find "$K8S_ETCD_SNAPSHOT_DIR" -type f -printf '%T@\n' 2>/dev/null | sort -nr | head -n 1)"
-    if [ -z "$latest" ]; then
-        crit "No etcd snapshot found in ${K8S_ETCD_SNAPSHOT_DIR}"
-        return
-    fi
+
     current="$(date +%s)"
-    age_hours="$(awk -v now="$current" -v then="$latest" 'BEGIN { printf "%d", (now-then)/3600 }')"
-    if [ "$age_hours" -gt "$K8S_ETCD_SNAPSHOT_MAX_AGE_HOURS" ]; then
-        crit "Latest etcd snapshot is ${age_hours}h old (limit ${K8S_ETCD_SNAPSHOT_MAX_AGE_HOURS}h)"
-    else
-        ok "Latest etcd snapshot is ${age_hours}h old"
-    fi
+    for target in "${K8S_ETCD_BACKUP_TARGETS[@]}"; do
+        IFS='|' read -r tier directory max_age_hours require_marker <<< "$target"
+        require_marker="${require_marker:-false}"
+        if [ ! -d "$directory" ]; then
+            crit "etcd ${tier} backup directory not found: ${directory}"
+            continue
+        fi
+        latest="$(find "$directory" -type f -name snapshot.db -printf '%T@|%p\n' 2>/dev/null | sort -nr | head -n 1)"
+        if [ -z "$latest" ]; then
+            crit "No etcd ${tier} snapshot.db found in ${directory}"
+            continue
+        fi
+        latest_path="${latest#*|}"
+        snapshot_dir="$(dirname "$latest_path")"
+        if [ "$require_marker" = "true" ] && [ ! -f "${snapshot_dir}/SUCCESS" ]; then
+            crit "Latest etcd ${tier} snapshot has no SUCCESS marker: ${snapshot_dir}"
+            continue
+        fi
+        age_hours="$(awk -v now="$current" -v then="${latest%%|*}" 'BEGIN { printf "%d", (now-then)/3600 }')"
+        if [ "$age_hours" -gt "$max_age_hours" ]; then
+            crit "Latest etcd ${tier} snapshot is ${age_hours}h old (limit ${max_age_hours}h)"
+        else
+            ok "Latest etcd ${tier} snapshot is ${age_hours}h old"
+        fi
+    done
 }
 
 check_storage() {
