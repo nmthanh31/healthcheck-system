@@ -30,7 +30,7 @@ check_longhorn() {
 
 check_etcd_snapshot_age() {
     local target tier directory max_age_hours require_marker latest latest_path
-    local current age_hours snapshot_dir
+    local current age_hours snapshot_dir latest_backup_log
     if [ "${#K8S_ETCD_BACKUP_TARGETS[@]}" -eq 0 ]; then
         skip "No etcd backup target configured; edit config/targets.conf"
         return
@@ -58,9 +58,32 @@ check_etcd_snapshot_age() {
         age_hours="$(awk -v now="$current" -v then="${latest%%|*}" 'BEGIN { printf "%d", (now-then)/3600 }')"
         if [ "$age_hours" -gt "$max_age_hours" ]; then
             crit "Latest etcd ${tier} snapshot is ${age_hours}h old (limit ${max_age_hours}h)"
-        else
-            ok "Latest etcd ${tier} snapshot is ${age_hours}h old"
+            continue
         fi
+
+        # The existing backup job uses etcdctl, so validate that its newest
+        # snapshot can be read instead of trusting only mtime.
+        if [ -x "$K8S_ETCDCTL_BIN" ]; then
+            if ! ETCDCTL_API=3 "$K8S_ETCDCTL_BIN" snapshot status "$latest_path" --write-out=json >/dev/null 2>&1; then
+                crit "Latest etcd ${tier} snapshot is not readable by etcdctl: ${latest_path}"
+                continue
+            fi
+        else
+            warn "etcdctl not found at ${K8S_ETCDCTL_BIN}; ${tier} snapshot freshness is unverified"
+        fi
+
+        # backup_logger() writes this exact status through systemd-cat. This
+        # gives the daily report the job's own success/failure signal.
+        if command -v journalctl >/dev/null 2>&1; then
+            latest_backup_log="$(journalctl -t "$K8S_ETCD_JOURNAL_TAG" --since "${max_age_hours} hours ago" --no-pager -o cat 2>/dev/null | grep -E "etcdv3 ${tier} backup (completed successfully|failed)" | tail -n 1 || true)"
+            if [[ "$latest_backup_log" == *"backup failed"* ]]; then
+                crit "etcd ${tier} backup job reported failure"
+                continue
+            elif [[ "$latest_backup_log" != *"completed successfully"* ]]; then
+                warn "No recent successful etcd ${tier} backup log with tag ${K8S_ETCD_JOURNAL_TAG}"
+            fi
+        fi
+        ok "Latest etcd ${tier} snapshot is ${age_hours}h old"
     done
 }
 
